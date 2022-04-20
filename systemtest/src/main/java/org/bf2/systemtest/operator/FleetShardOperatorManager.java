@@ -32,7 +32,7 @@ public class FleetShardOperatorManager {
     public static final Path CRD_PATH = SystemTestEnvironment.ROOT_PATH.resolve("operator").resolve("target").resolve("kubernetes");
 
     private static final Logger LOGGER = LogManager.getLogger(FleetShardOperatorManager.class);
-    public static final String OPERATOR_NS = "kas-fleetshard";
+    public static final String OPERATOR_NS = "redhat-kas-fleetshard-operator";
     public static final String OPERATOR_NAME = "kas-fleetshard-operator";
     public static final String SYNC_NAME = "kas-fleetshard-sync";
     private static List<Path> installedCrds = new ArrayList<>();

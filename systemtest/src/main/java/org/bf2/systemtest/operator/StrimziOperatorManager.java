@@ -43,7 +43,7 @@ public class StrimziOperatorManager {
     private static final String STRIMZI_URL_FORMAT = "https://github.com/strimzi/strimzi-kafka-operator/releases/download/%1$s/strimzi-cluster-operator-%1$s.yaml";
 
     private static final Logger LOGGER = LogManager.getLogger(StrimziOperatorManager.class);
-    public static final String DEPLOYMENT_PREFIX = "strimzi-cluster-operator";
+    public static final String DEPLOYMENT_PREFIX = "redhat-managed-kafka-operator";
     public static final String OPERATOR_NS = DEPLOYMENT_PREFIX;
 
     private final List<Consumer<Void>> clusterWideResourceDeleters = new LinkedList<>();
