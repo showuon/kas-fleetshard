@@ -55,6 +55,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -99,14 +100,17 @@ public class ManagedKafkaProvisioner {
         return new ManagedKafkaProvisioner(cluster);
     }
 
-    static ConfigMap toConfigMap(KafkaInstanceConfiguration profile) throws IOException {
+    static ConfigMap toConfigMap(KafkaInstanceConfiguration profile, Map<String, String> baseProperties) throws IOException {
+        Map<String, String> allProperties = new LinkedHashMap<>(baseProperties);
+
         Map<String, String> propertyMap = profile.toMap(false);
+        allProperties.putAll(propertyMap);
 
         ConfigMap override =
                 new ConfigMapBuilder().withNewMetadata()
                         .withName(KAS_FLEETSHARD_CONFIG)
                         .endMetadata()
-                        .withData(propertyMap)
+                        .withData(allProperties)
                         .build();
         return override;
     }
@@ -286,7 +290,7 @@ public class ManagedKafkaProvisioner {
      */
     public ManagedKafkaDeployment deployCluster(String name, ManagedKafkaCapacity managedKafkaCapacity,
             KafkaInstanceConfiguration profile) throws Exception {
-        return deployCluster(new ObjectMetaBuilder().withName(name).build(), managedKafkaCapacity, profile);
+        return deployCluster(new ObjectMetaBuilder().withName(name).build(), managedKafkaCapacity, profile, Collections.emptyMap());
     }
 
     /**
@@ -296,7 +300,7 @@ public class ManagedKafkaProvisioner {
      * @param profile
      */
     public ManagedKafkaDeployment deployCluster(ObjectMeta meta, ManagedKafkaCapacity managedKafkaCapacity,
-            KafkaInstanceConfiguration profile) throws Exception {
+            KafkaInstanceConfiguration profile, Map<String, String> baseProperties) throws Exception {
         // set and validate the strimzi version
         String strimziVersion = PerformanceEnvironment.STRIMZI_VERSION;
         if (strimziVersion == null) {
@@ -318,7 +322,7 @@ public class ManagedKafkaProvisioner {
             profile.getKafka().setReplicasOverride(replicas);
         }
 
-        applyProfile(profile, replicas);
+        applyProfile(profile, replicas, baseProperties);
 
         String namespace = Constants.KAFKA_NAMESPACE;
 
@@ -414,7 +418,7 @@ public class ManagedKafkaProvisioner {
         removeTaintsOnNodes();
     }
 
-    void applyProfile(KafkaInstanceConfiguration profile, int replicas) throws IOException {
+    void applyProfile(KafkaInstanceConfiguration profile, int replicas, Map<String, String> baseProperties) throws IOException {
         if (!this.clusters.isEmpty()) {
             // until install applies the profile, we can only do one deployment at a time
             throw new IllegalStateException("the provisioner cannot currently manage multiple clusters");
@@ -430,7 +434,7 @@ public class ManagedKafkaProvisioner {
                 workers.stream());
 
         // convert the profile into simple configmap values
-        ConfigMap override = toConfigMap(profile);
+        ConfigMap override = toConfigMap(profile, baseProperties);
 
         var configMapClient =
                 cluster.kubeClient().client().configMaps().inNamespace(FleetShardOperatorManager.OPERATOR_NS);

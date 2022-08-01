@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import org.bf2.common.SuppressFBWarnings;
 import org.bf2.operator.operands.KafkaInstanceConfiguration;
 import org.bf2.operator.operands.KafkaInstanceConfiguration.Kafka;
+import org.bf2.operator.operands.KafkaInstanceConfigurations;
 import org.bf2.operator.resources.v1alpha1.ManagedKafka;
 import org.bf2.operator.resources.v1alpha1.ManagedKafkaCapacity;
 import org.bf2.performance.TestUtils.AvailableResources;
@@ -79,7 +80,7 @@ public class InstanceProfiler {
     }
 
     public enum Storage {
-        GP2("10Gi"), GP3("223Gi");
+        GP2("10Gi"), GP3("223Gi"), STANDARD("10Gi");
 
         Storage(String zookeeperSize) {
             this.zookeeperSize = zookeeperSize;
@@ -248,7 +249,7 @@ public class InstanceProfiler {
 
         public TreeMap<Integer, LatencyResult> partitionResults = new TreeMap<>();
 
-        public Map<Profile, ThroughputResult> throughputResults = new HashMap<>();
+        public Map<String, ThroughputResult> throughputResults = new HashMap<>();
 
         // connections
         //public TreeMap<Integer, LatencyResult> consumers = new TreeMap<>();
@@ -462,8 +463,6 @@ public class InstanceProfiler {
 
         deployIfNeeded("profile");
 
-        maxMessageSize();
-
         if (profilingResult.completedStep == Step.SIZE) {
             profilingResult.baselineLatency = determineLatency(workload -> {
                 workload.partitionsPerTopic = testParameters.getNominialPartitionCount();
@@ -476,8 +475,8 @@ public class InstanceProfiler {
 
         if (profilingResult.completedStep == Step.LATENCY) {
             if (!testParameters.config.getKafka().isEnableQuota()) {
-                determineThroughput(LATENCY_NO_BATCHING);
-                determineThroughput(THROUGHPUT);
+                determineThroughput(LATENCY_NO_BATCHING, "no batching");
+                determineThroughput(THROUGHPUT, "saturating w/batching");
             }
             streamingUnitTest();
             writeResults(Step.THROUGHPUT);
@@ -532,7 +531,7 @@ public class InstanceProfiler {
             builder.withName(name);
             builder.addToLabels(ManagedKafka.PROFILE_TYPE, this.testParameters.profile);
             //builder.addToLabels(ManagedKafka.DEPLOYMENT_TYPE, "reserved");
-            kd = kafkaProvisioner.deployCluster(builder.build(), profilingResult.capacity, profilingResult.config);
+            kd = kafkaProvisioner.deployCluster(builder.build(), profilingResult.capacity, profilingResult.config, this.testParameters.override);
         } else {
             // TODO validate config / capacity
             kd = new ManagedKafkaDeployment(mk, kafkaCluster);
@@ -600,7 +599,7 @@ public class InstanceProfiler {
      * Determine throughput
      * see https://www.confluent.io/blog/kafka-fastest-messaging-system/#throughput-test
      */
-    protected void determineThroughput(Profile profile) throws Exception {
+    protected void determineThroughput(Profile profile, String name) throws Exception {
         int pub = Math.max(testParameters.getNominialPartitionCount(), 2 * profilingResult.ombWorkerNodes);
 
         // start by over producing to get a better guess at producer rate
@@ -617,7 +616,7 @@ public class InstanceProfiler {
         LOGGER.info(String.format("Result summary for %s %s producers/consumers %s", profile, pub,
                 Serialization.asYaml(throughputResult)));
 
-        profilingResult.throughputResults.put(profile, throughputResult);
+        profilingResult.throughputResults.put(name, throughputResult);
 
         // could run again for confirmation - or take multiple samples
         // there could also be a notion of a sustained accounting for latency
@@ -662,7 +661,7 @@ public class InstanceProfiler {
     }
 
     private void readResults() throws IOException {
-        File file = new File("result.yaml");
+        File file = new File(testParameters.outputDirectory, "result.yaml");
         if (file.exists()) {
             profilingResult = Serialization.unmarshal(Files.readString(file.toPath()), ProfilingResult.class);
         }
@@ -741,7 +740,9 @@ public class InstanceProfiler {
             containerResources(testParameters.config.getAdminserver(), cpuResources, memoryResources);
             containerResources(testParameters.config.getExporter(), cpuResources, memoryResources);
             containerResources(testParameters.config.getCanary(), cpuResources, memoryResources);
-            containerResources(testParameters.config.getCruiseControl(), cpuResources, memoryResources);
+            if (KafkaInstanceConfigurations.InstanceType.STANDARD.getLowerName().equals(testParameters.profile)) {
+                containerResources(testParameters.config.getCruiseControl(), cpuResources, memoryResources);
+            }
 
             LOGGER.info("Total overhead of additional pods {} memory, {} cpu",
                     memoryResources.stream().collect(Collectors.summingLong(Long::valueOf)),
@@ -803,8 +804,10 @@ public class InstanceProfiler {
     }
 
     private void createCapacity() {
-        profilingResult.capacity = kafkaProvisioner.defaultCapacity(
-                Quantity.getAmountInBytes(testParameters.ingressPerUnit).longValue() * testParameters.units);
+        profilingResult.capacity = new ManagedKafkaCapacity();
+        long ingress = Quantity.getAmountInBytes(testParameters.ingressPerUnit).longValue() * testParameters.units;
+        profilingResult.capacity.setIngressPerSec(Quantity.parse(String.valueOf(ingress)));
+        profilingResult.capacity.setEgressPerSec(Quantity.parse(String.valueOf(ingress * testParameters.egressMultiple)));
         profilingResult.capacity
                 .setMaxDataRetentionSize(Quantity.parse(Quantity.getAmountInBytes(testParameters.dataRetentionPerUnit)
                         .multiply(BigDecimal.valueOf(testParameters.units))
@@ -830,16 +833,12 @@ public class InstanceProfiler {
 
         for (int i = 0; i < 4; i++) {
             int sample = maxPartitions / 4 * (i + 1);
-            try {
-                LOGGER.info("Running latency test for {} partitions", sample);
-                profilingResult.partitionResults.put(sample, determineLatency(workload -> {
-                    workload.partitionsPerTopic = sample;
-                    workload.consumerPerSubscription = Math.min(sample, maxClients);
-                    workload.name = "latency-partitions-" + sample;
-                }));
-            } catch (IllegalStateException e) {
-                LOGGER.info(String.format("not accepting %s as there were errors during the test", sample), e);
-            }
+            LOGGER.info("Running latency test for {} partitions", sample);
+            profilingResult.partitionResults.put(sample, determineLatency(workload -> {
+                workload.partitionsPerTopic = sample;
+                workload.consumerPerSubscription = Math.min(sample, maxClients);
+                workload.name = "latency-partitions-" + sample;
+            }));
         }
     }
 
