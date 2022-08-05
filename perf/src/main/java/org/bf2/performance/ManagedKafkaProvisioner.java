@@ -68,6 +68,7 @@ import java.util.stream.Stream;
  */
 public class ManagedKafkaProvisioner {
 
+    public static final String KAFKA_NAMESPACE = "kafka";
     private static final String KAS_FLEETSHARD_CONFIG = "kas-fleetshard-config";
     public static final String KAFKA_BROKER_TAINT_KEY = "org.bf2.operator/kafka-broker";
     private static final Logger LOGGER = LogManager.getLogger(ManagedKafkaProvisioner.class);
@@ -151,7 +152,7 @@ public class ManagedKafkaProvisioner {
             this.clusters.addAll(cluster.kubeClient()
                     .client()
                     .resources(ManagedKafka.class)
-                    .inNamespace(Constants.KAFKA_NAMESPACE)
+                    .inNamespace(KAFKA_NAMESPACE)
                     .list()
                     .getItems());
         } catch (KubernetesClientException e) {
@@ -195,7 +196,7 @@ public class ManagedKafkaProvisioner {
         }
         cluster.waitForDeleteNamespace(StrimziOperatorManager.OPERATOR_NS);
         FleetShardOperatorManager.deleteFleetShard(cluster.kubeClient()).get(2, TimeUnit.MINUTES);
-        cluster.createNamespace(Constants.KAFKA_NAMESPACE, nsAnnotations, Map.of());
+        cluster.createNamespace(KAFKA_NAMESPACE, nsAnnotations, Map.of());
 
         List<Node> workers = cluster.getWorkerNodes();
 
@@ -324,7 +325,7 @@ public class ManagedKafkaProvisioner {
 
         applyProfile(profile, replicas, baseProperties);
 
-        String namespace = Constants.KAFKA_NAMESPACE;
+        String namespace = KAFKA_NAMESPACE;
 
         ManagedKafka managedKafka = new ManagedKafkaBuilder()
                 .withMetadata(meta).editMetadata()
@@ -371,7 +372,7 @@ public class ManagedKafkaProvisioner {
      * @throws IOException
      */
     public void removeClusters(boolean all) throws IOException {
-        var client = cluster.kubeClient().client().resources(ManagedKafka.class).inNamespace(Constants.KAFKA_NAMESPACE);
+        var client = cluster.kubeClient().client().resources(ManagedKafka.class).inNamespace(KAFKA_NAMESPACE);
         List<ManagedKafka> kafkas = clusters;
         if (all) {
             kafkas = client.list().getItems();
@@ -413,8 +414,8 @@ public class ManagedKafkaProvisioner {
         removeClusters(false);
         strimziManager.deleteStrimziOperator();
         FleetShardOperatorManager.deleteFleetShard(cluster.kubeClient());
-        LOGGER.info("Deleting namespace {}", Constants.KAFKA_NAMESPACE);
-        cluster.waitForDeleteNamespace(Constants.KAFKA_NAMESPACE);
+        LOGGER.info("Deleting namespace {}", KAFKA_NAMESPACE);
+        cluster.waitForDeleteNamespace(KAFKA_NAMESPACE);
         removeTaintsOnNodes();
     }
 
@@ -440,19 +441,14 @@ public class ManagedKafkaProvisioner {
                 cluster.kubeClient().client().configMaps().inNamespace(FleetShardOperatorManager.OPERATOR_NS);
         configMapClient.createOrReplace(override);
 
-        // restart the operator deployment
-        RollableScalableResource<Deployment> fleetshardOperatorDeployment = cluster.kubeClient()
-                .client()
-                .apps()
-                .deployments()
-                .inNamespace(FleetShardOperatorManager.OPERATOR_NS)
-                .withName(FleetShardOperatorManager.OPERATOR_NAME);
         LOGGER.info("Restarting fleetshard operatior with configuration {}", Serialization.asYaml(override));
 
-        fleetshardOperatorDeployment.scale(0, true);
-        fleetshardOperatorDeployment.scale(1, true);
-
-        //fleetshardOperatorDeployment.waitUntilReady(30, TimeUnit.SECONDS);
+        // restart the operator deployment
+        cluster.kubeClient()
+                .client()
+                .pods()
+                .inNamespace(FleetShardOperatorManager.OPERATOR_NS)
+                .withLabel("app", "kas-fleetshard-operator").delete();
     }
 
     public void validateClusterForBrokers(int brokers, boolean colocateWithZookeeper, Stream<Node> workers) {
@@ -536,6 +532,20 @@ public class ManagedKafkaProvisioner {
         Kafka kafka = kafkaClient.require();
         LOGGER.info("Created Kafka {}", Serialization.asYaml(kafka));
         return new ManagedKafkaDeployment(managedKafka, cluster);
+    }
+
+    public ManagedKafka getCluster(String name) {
+        Resource<ManagedKafka> mkResource = cluster.kubeClient()
+                .client()
+                .resources(ManagedKafka.class)
+                .inNamespace(KAFKA_NAMESPACE)
+                .withName(name);
+        try {
+            return mkResource.get();
+        } catch (KubernetesClientException e) {
+
+        }
+        return null;
     }
 
 }

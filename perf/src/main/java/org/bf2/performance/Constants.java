@@ -8,6 +8,4 @@ public class Constants {
     public static final String OPENSHIFT_INGRESS_OPERATOR = "openshift-ingress-operator";
     public static final String ORG_BF2_KAFKA_PERFORMANCE_COLLECTPODLOG = "org.bf2.performance/collectpodlog";
     public static final String ORG_BF2_PERFORMANCE_CHECKRESTARTEDCONTAINERS = "org.bf2.performance/checkrestartedcontainers";
-    public static final String KAFKA_NAMESPACE = "kafka";
-    public static final String MK_STORAGECLASS = "mk-storageclass";
 }

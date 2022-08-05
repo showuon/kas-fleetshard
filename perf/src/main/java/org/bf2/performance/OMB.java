@@ -110,6 +110,10 @@ public class OMB {
      * Install build config, image stream and trust cert. Trigger the initial build.
      */
     public void install(TlsConfig tlsConfig) throws IOException {
+        install(tlsConfig.getTrustStoreBase64());
+    }
+
+    public void install(String base64EncodedTrustStore) throws IOException {
         LOGGER.info("Installing OMB in namespace {}", Constants.OMB_NAMESPACE);
 
         pullAndHoldWorkerImageToAllNodesUsingDaemonSet();
@@ -120,13 +124,12 @@ public class OMB {
             nsAnnotations.put(Constants.ORG_BF2_KAFKA_PERFORMANCE_COLLECTPODLOG, "true");
         }
         ombCluster.createNamespace(Constants.OMB_NAMESPACE, nsAnnotations, Map.of());
-        String keystore = tlsConfig.getTrustStoreBase64();
         ombCluster.kubeClient().client().secrets().inNamespace(Constants.OMB_NAMESPACE).create(new SecretBuilder()
                 .editOrNewMetadata()
                 .withName("ext-listener-crt")
                 .withNamespace(Constants.OMB_NAMESPACE)
                 .endMetadata()
-                .addToData("listener.jks", keystore)
+                .addToData("listener.jks", base64EncodedTrustStore)
                 .build());
 
         LOGGER.info("Done installing OMB in namespace {}", Constants.OMB_NAMESPACE);
