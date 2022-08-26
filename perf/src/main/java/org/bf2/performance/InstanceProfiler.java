@@ -177,7 +177,7 @@ public class InstanceProfiler {
 
         // defines the number and shape of a unit
         public int units = 1;
-        public int maxConnectionsPerUnit = 2000;
+        public int maxConnectionsPerUnit = 3000;
         public int maxPartitionsPerUnit = 1500;
         public Quantity ingressPerUnit = Quantity.parse("50Mi");
         public int egressMultiple = 2;
@@ -852,7 +852,7 @@ public class InstanceProfiler {
      *   for a fixed number of consumers -- were they scaling the consumers as well?
      */
     protected void determinePartitions() throws Exception {
-        int maxClients = testParameters.getMaxClients();
+        int maxClients = adjustedMaxClients(.4);
         int maxPartitions = testParameters.config.getKafka().getPartitionCapacity() * testParameters.units;
         if (testParameters.config.getKafka().isEnableQuota()) {
             maxPartitions = Math.min(maxPartitions, testParameters.maxPartitionsPerUnit * testParameters.units);
@@ -894,8 +894,12 @@ public class InstanceProfiler {
     }
 
     private void determineProducers() throws Exception {
-        int maxClients = testParameters.getMaxClients();
-        List<Integer> samples = Arrays.asList(2 * (maxClients / 5), maxClients, (maxClients * 3) / 2);
+        int maxClients = adjustedMaxClients(.8);
+        List<Integer> samples = new ArrayList<>(Arrays.asList(2 * (maxClients / 5), maxClients));
+        if (!testParameters.config.getKafka().isEnableQuota()) {
+            samples.add(3 * maxClients / 2);
+        }
+
         for (int sample : samples) {
             LOGGER.info("Running latency test for {} producers", sample);
             profilingResult.producers.put(sample, determineLatency(workload -> {
@@ -903,6 +907,14 @@ public class InstanceProfiler {
                 workload.name = "latency-producers-" + sample;
             }));
         }
+    }
+
+    private int adjustedMaxClients(double percentage) {
+        // subtract out the other consumer or producer connections and the canary, then
+        // assume that the spread of bootstrap connections will not be perfect
+        // - the imbalance seems to be different with consumers/producers, so we use a different percentage
+        // depending on the case
+        return (int) (percentage * (testParameters.getMaxClients() - (testParameters.getNominialPartitionCount() - 1)));
     }
 
     protected boolean isThroughputAcceptable(OMBWorkload load, TestResult loadTestResult) {
