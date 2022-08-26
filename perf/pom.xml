@@ -21,7 +21,7 @@
             <name>shawkins</name>
             <url>https://raw.githubusercontent.com/shawkins/repo/master</url>
             <snapshots>
-                <enabled>false</enabled>
+                <enabled>true</enabled>
             </snapshots>
             <releases>
                 <enabled>true</enabled>
