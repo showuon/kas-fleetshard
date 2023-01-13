@@ -89,6 +89,7 @@ public class IngressControllerManager {
 
     private static final String MAX_CONNECTIONS = "maxConnections";
     private static final String RELOAD_INTERVAL = "reloadInterval";
+    private static final String DYNAMIC_CONFIG_MANAGER = "dynamicConfigManager";
     private static final String UNSUPPORTED_CONFIG_OVERRIDES = "unsupportedConfigOverrides";
     private static final String TUNING_OPTIONS = "tuningOptions";
     protected static final String INGRESSCONTROLLER_LABEL = "ingresscontroller.operator.openshift.io/owning-ingresscontroller";
@@ -115,7 +116,7 @@ public class IngressControllerManager {
      */
     private static final String ROUTER_SUBDOMAIN = "ingresscontroller.";
 
-    private static int count = 0;
+//    private static int count = 0;
 
     /**
      * Predicate that will return true if the input string looks like a broker resource name.
@@ -540,13 +541,13 @@ public class IngressControllerManager {
         log.errorf("!!! route name is:" + name) ;
         if (hardStopAfter != null && !hardStopAfter.isBlank()) {
             if (name.contains("kas-us-east-1a")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "900s").endMetadata();
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "15s").endMetadata();
             } else if (name.contains("kas-us-east-1b")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "300s").endMetadata();
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "5s").endMetadata();
             } else if (name.contains("kas-us-east-1c")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "600s").endMetadata();
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "10s").endMetadata();
             } else {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "65s").endMetadata();
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "300s").endMetadata();
             }
 
 //            builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, hardStopAfter).endMetadata();
@@ -559,8 +560,8 @@ public class IngressControllerManager {
 
 //        if (ingressReloadIntervalSeconds > 0 && ingressReloadIntervalSeconds == 60) {
 
-        log.errorf("!!! (Map<String, Object>)spec.get(TUNING_OPTIONS) :" + (Map<String, Object>)spec.get(TUNING_OPTIONS) );
-        log.errorf("!!! (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) :" + (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) );
+//        log.errorf("!!! (Map<String, Object>)spec.get(TUNING_OPTIONS) :" + (Map<String, Object>)spec.get(TUNING_OPTIONS) );
+//        log.errorf("!!! (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) :" + (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) );
 //        log.errorf("!!! count:" + count);
 
 
@@ -572,6 +573,8 @@ public class IngressControllerManager {
         if (ingressReloadIntervalSeconds > 0) {
             setSpecProperty(spec, TUNING_OPTIONS, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
             setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
+            setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, DYNAMIC_CONFIG_MANAGER, "true");
+            log.errorf("!!! set :" + DYNAMIC_CONFIG_MANAGER);
         } else {
             removeSpecProperty(spec, RELOAD_INTERVAL);
         }
