@@ -115,6 +115,8 @@ public class IngressControllerManager {
      */
     private static final String ROUTER_SUBDOMAIN = "ingresscontroller.";
 
+    private static int count = 0;
+
     /**
      * Predicate that will return true if the input string looks like a broker resource name.
      */
@@ -535,8 +537,19 @@ public class IngressControllerManager {
                 .endSpec();
         }
 
+        log.errorf("!!! route name is:" + name) ;
         if (hardStopAfter != null && !hardStopAfter.isBlank()) {
-            builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, hardStopAfter).endMetadata();
+            if (name.contains("kas-us-east-1a")) {
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "900s").endMetadata();
+            } else if (name.contains("kas-us-east-1b")) {
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "300s").endMetadata();
+            } else if (name.contains("kas-us-east-1c")) {
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "600s").endMetadata();
+            } else {
+                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "65s").endMetadata();
+            }
+
+//            builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, hardStopAfter).endMetadata();
         } else {
             builder.editMetadata().removeFromAnnotations(HARD_STOP_AFTER_ANNOTATION).endMetadata();
         }
@@ -544,12 +557,29 @@ public class IngressControllerManager {
         // editing properties that may not exist and unsupported is easier as generic
         GenericKubernetesResource spec = Serialization.jsonMapper().convertValue(builder.buildSpec(), GenericKubernetesResource.class);
 
+//        if (ingressReloadIntervalSeconds > 0 && ingressReloadIntervalSeconds == 60) {
+
+        log.errorf("!!! (Map<String, Object>)spec.get(TUNING_OPTIONS) :" + (Map<String, Object>)spec.get(TUNING_OPTIONS) );
+        log.errorf("!!! (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) :" + (Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) );
+//        log.errorf("!!! count:" + count);
+
+
+//        if ((Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES) != null && ((Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES)).containsKey(RELOAD_INTERVAL)) {
+//            int reloadInterval = (int)((Map<String, Object>)spec.get(UNSUPPORTED_CONFIG_OVERRIDES)).get(RELOAD_INTERVAL);
+//            log.errorf("!!! get reloadInterval:" + reloadInterval);
+//
+
         if (ingressReloadIntervalSeconds > 0) {
             setSpecProperty(spec, TUNING_OPTIONS, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
             setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
         } else {
             removeSpecProperty(spec, RELOAD_INTERVAL);
         }
+
+
+//        } else {
+//            removeSpecProperty(spec, RELOAD_INTERVAL);
+//        }
         setSpecProperty(spec, TUNING_OPTIONS, MAX_CONNECTIONS, maxIngressConnections);
         setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, MAX_CONNECTIONS, maxIngressConnections);
 

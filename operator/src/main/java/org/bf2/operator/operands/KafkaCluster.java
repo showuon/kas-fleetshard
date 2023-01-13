@@ -70,7 +70,6 @@ import org.bf2.operator.managers.OperandOverrideManager;
 import org.bf2.operator.managers.StrimziManager;
 import org.bf2.operator.operands.KafkaInstanceConfiguration.AccessControl;
 import org.bf2.operator.resources.v1alpha1.ManagedKafka;
-import org.bf2.operator.resources.v1alpha1.ManagedKafkaAuthenticationOAuth;
 import org.bf2.operator.resources.v1alpha1.ServiceAccount;
 import org.eclipse.microprofile.config.Config;
 import org.jboss.logging.Logger;
@@ -740,12 +739,13 @@ public class KafkaCluster extends AbstractKafkaCluster {
             config.put("kas.policy.topic-config.mutable", kafkaConfigs.getTopicConfigMutableRule());
         }
 
-        ManagedKafkaAuthenticationOAuth oauth = managedKafka.getSpec().getOauth();
-        var maximumSessionLifetime = oauth != null ? oauth.getMaximumSessionLifetime() : null;
-        long maxReauthMs = maximumSessionLifetime != null ?
-                Math.max(maximumSessionLifetime, 0) :
-                kafkaConfigs.getMaximumSessionLifetimeDefault();
-        config.put("connections.max.reauth.ms", maxReauthMs);
+//        ManagedKafkaAuthenticationOAuth oauth = managedKafka.getSpec().getOauth();
+//        var maximumSessionLifetime = oauth != null ? oauth.getMaximumSessionLifetime() : null;
+//        long maxReauthMs = maximumSessionLifetime != null ?
+//                Math.max(maximumSessionLifetime, 0) :
+//                kafkaConfigs.getMaximumSessionLifetimeDefault();
+        config.put("connections.max.reauth.ms", 0);
+        config.put("connections.max.idle.ms", 180000);
 
         config.put("create.topic.policy.class.name", "io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy");
         config.put("alter.config.policy.class.name", "io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy");
