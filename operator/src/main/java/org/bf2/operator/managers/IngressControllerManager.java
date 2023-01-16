@@ -554,19 +554,19 @@ public class IngressControllerManager {
                 .endSpec();
         }
 
-        log.errorf("!!! route name is:" + name) ;
-        if (hardStopAfter != null && !hardStopAfter.isBlank()) {
-            if (name.contains("kas-us-east-1a")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "15s").endMetadata();
-            } else if (name.contains("kas-us-east-1b")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "5s").endMetadata();
-            } else if (name.contains("kas-us-east-1c")) {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "10s").endMetadata();
-            } else {
-                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "300s").endMetadata();
-            }
 
-//            builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, hardStopAfter).endMetadata();
+        if (hardStopAfter != null && !hardStopAfter.isBlank()) {
+//            if (name.contains("kas-us-east-1a")) {
+//                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "15s").endMetadata();
+//            } else if (name.contains("kas-us-east-1b")) {
+//                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "5s").endMetadata();
+//            } else if (name.contains("kas-us-east-1c")) {
+//                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "10s").endMetadata();
+//            } else {
+//                builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, "300s").endMetadata();
+//            }
+
+            builder.editMetadata().addToAnnotations(HARD_STOP_AFTER_ANNOTATION, hardStopAfter).endMetadata();
         } else {
             builder.editMetadata().removeFromAnnotations(HARD_STOP_AFTER_ANNOTATION).endMetadata();
         }
