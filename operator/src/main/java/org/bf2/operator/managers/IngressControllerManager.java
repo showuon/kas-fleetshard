@@ -45,7 +45,10 @@ import org.bf2.operator.ManagedKafkaKeys.Labels;
 import org.bf2.operator.operands.AbstractKafkaCluster;
 import org.bf2.operator.operands.KafkaCluster;
 import org.bf2.operator.resources.v1alpha1.ManagedKafka;
+import org.bf2.operator.resources.v1alpha1.ManagedKafkaAgent;
+import org.bf2.operator.resources.v1alpha1.ManagedKafkaAgentSpec;
 import org.bf2.operator.resources.v1alpha1.ManagedKafkaRoute;
+import org.bf2.operator.resources.v1alpha1.NetworkConfiguration;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -170,6 +173,9 @@ public class IngressControllerManager {
     List<String> ingressContainerCommand;
     @ConfigProperty(name = "ingresscontroller.reload-interval-seconds")
     Integer ingressReloadIntervalSeconds;
+
+    @ConfigProperty(name = "ingresscontroller.dynamic-config-manager")
+    Boolean dynamicConfigManager;
 
     @ConfigProperty(name = "ingresscontroller.peak-throughput-percentage")
     int peakThroughputPercentage;
@@ -466,7 +472,7 @@ public class IngressControllerManager {
             LabelSelector routeSelector = new LabelSelector(null, routeMatchLabel);
             routeMatchLabels.putAll(routeMatchLabel);
 
-            buildIngressController(kasZone, domain, e.getValue(), replicas, routeSelector, zone);
+            createOrEditIngressController(kasZone, domain, e.getValue(), replicas, routeSelector, zone);
         });
     }
 
@@ -479,11 +485,16 @@ public class IngressControllerManager {
         LabelSelector routeSelector = new LabelSelector(null, routeMatchLabel);
         routeMatchLabels.putAll(routeMatchLabel);
 
-        buildIngressController("kas", "kas." + clusterDomain, existing, replicas, routeSelector, null);
+        createOrEditIngressController("kas", "kas." + clusterDomain, existing, replicas, routeSelector, null);
     }
 
-    private void buildIngressController(String name, String domain,
+    private void createOrEditIngressController(String name, String domain,
             IngressController existing, int replicas, LabelSelector routeSelector, String topologyValue) {
+        createOrEdit(buildIngressController(name, domain, existing, replicas, routeSelector, topologyValue, informerManager.getLocalAgent()), existing);
+    }
+
+    IngressController buildIngressController(String name, String domain,
+            IngressController existing, int replicas, LabelSelector routeSelector, String topologyValue, ManagedKafkaAgent agent) {
 
         Optional<IngressController> optionalExisting = Optional.ofNullable(existing);
         IngressControllerBuilder builder = optionalExisting.map(IngressControllerBuilder::new).orElseGet(IngressControllerBuilder::new);
@@ -501,7 +512,12 @@ public class IngressControllerManager {
                 .withNewEndpointPublishingStrategy()
                      .withType("LoadBalancerService")
                      .withNewLoadBalancer()
-                         .withScope("External")
+                         .withScope(Optional.ofNullable(agent)
+                             .map(ManagedKafkaAgent::getSpec)
+                             .map(ManagedKafkaAgentSpec::getNet)
+                             .filter(NetworkConfiguration::isPrivate)
+                             .map(a -> "Internal")
+                             .orElse("External"))
                          .withNewProviderParameters()
                              .withType("AWS")
                              .withNewAws()
@@ -573,21 +589,15 @@ public class IngressControllerManager {
         if (ingressReloadIntervalSeconds > 0) {
             setSpecProperty(spec, TUNING_OPTIONS, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
             setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, RELOAD_INTERVAL, ingressReloadIntervalSeconds);
-            setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, DYNAMIC_CONFIG_MANAGER, "true");
-            log.errorf("!!! set :" + DYNAMIC_CONFIG_MANAGER);
         } else {
             removeSpecProperty(spec, RELOAD_INTERVAL);
         }
-
-
-//        } else {
-//            removeSpecProperty(spec, RELOAD_INTERVAL);
-//        }
+        setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, DYNAMIC_CONFIG_MANAGER, dynamicConfigManager != null ? dynamicConfigManager.toString() : Boolean.FALSE.toString());
         setSpecProperty(spec, TUNING_OPTIONS, MAX_CONNECTIONS, maxIngressConnections);
         setSpecProperty(spec, UNSUPPORTED_CONFIG_OVERRIDES, MAX_CONNECTIONS, maxIngressConnections);
 
         // on fabric8 6.1 we can convert back from the generic to the actual spec, on earlier versions we cannot
-        // because the unsupportOptions won't be preserved
+        // because the unsupportedOptions won't be preserved
         builder.editSpec()
                 .withTuningOptions(Serialization.jsonMapper()
                         .convertValue(spec.get(TUNING_OPTIONS), IngressControllerTuningOptions.class))
@@ -599,7 +609,7 @@ public class IngressControllerManager {
                                 .orElse(null))
                 .endSpec();
 
-        createOrEdit(builder.build(), existing);
+        return builder.build();
     }
 
     private void setSpecProperty(GenericKubernetesResource spec, String property, String key, Object value) {
